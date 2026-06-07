@@ -1,0 +1,959 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>IDAS — International Date Authorization System</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --pink:#f472b6; --pink-light:#fbcfe8; --pink-glow:#f9a8d4; --rose:#fb7185;
+  --cream:#fff7f0; --peach:#fed7aa; --sand:#fde8d0; --text:#1a0a14; --muted:#9d6b8a;
+  --glass-bg:rgba(255,255,255,0.72); --glass-border:rgba(255,255,255,0.9);
+  --shadow:0 8px 40px rgba(244,114,182,0.15); --shadow-lg:0 20px 80px rgba(244,114,182,0.25);
+  --radius:20px; --radius-lg:28px;
+  --font-serif:'Instrument Serif',Georgia,serif; --font-sans:'DM Sans',system-ui,sans-serif;
+}
+html { height:100%; }
+body {
+  font-family:var(--font-sans);
+  background:linear-gradient(135deg,#fff0f6 0%,#fdf2fb 30%,#fff5ee 60%,#fff0f9 100%);
+  min-height:100%; color:var(--text); overflow-x:hidden; -webkit-font-smoothing:antialiased;
+}
+#bg-canvas { position:fixed; top:0; left:0; width:100%; height:100%; pointer-events:none; z-index:0; }
+.app { position:relative; z-index:1; min-height:100dvh; display:flex; flex-direction:column; align-items:center; padding:24px 16px 48px; }
+.topbar { width:100%; max-width:480px; display:flex; align-items:center; justify-content:space-between; margin-bottom:24px; padding:0 4px; }
+.topbar-logo { font-family:var(--font-sans); font-weight:600; font-size:11px; letter-spacing:0.12em; text-transform:uppercase; color:var(--muted); cursor:default; }
+.topbar-logo span { color:var(--pink); }
+.mute-btn { background:var(--glass-bg); border:1.5px solid var(--glass-border); border-radius:50%; width:36px; height:36px; cursor:pointer; display:flex; align-items:center; justify-content:center; font-size:16px; transition:all 0.2s; backdrop-filter:blur(10px); -webkit-backdrop-filter:blur(10px); }
+.mute-btn:hover { transform:scale(1.1); }
+.screen { display:none; width:100%; max-width:480px; flex-direction:column; align-items:center; gap:20px; }
+.screen.active { display:flex; }
+.screen.active > * { animation:fadeSlideUp 0.45s cubic-bezier(0.34,1.56,0.64,1) both; }
+.screen.active > *:nth-child(1) { animation-delay:0ms; }
+.screen.active > *:nth-child(2) { animation-delay:60ms; }
+.screen.active > *:nth-child(3) { animation-delay:110ms; }
+.screen.active > *:nth-child(4) { animation-delay:150ms; }
+.screen.active > *:nth-child(5) { animation-delay:185ms; }
+@keyframes fadeSlideUp { from{opacity:0;transform:translateY(30px) scale(0.97)} to{opacity:1;transform:translateY(0) scale(1)} }
+.card { width:100%; background:var(--glass-bg); border:1.5px solid var(--glass-border); border-radius:var(--radius-lg); padding:32px 28px; backdrop-filter:blur(20px); -webkit-backdrop-filter:blur(20px); box-shadow:var(--shadow),0 1px 0 rgba(255,255,255,0.9) inset; position:relative; overflow:hidden; transform-origin:center center; transition:transform 0.35s cubic-bezier(0.34,1.56,0.64,1),box-shadow 0.35s; }
+.card::before { content:''; position:absolute; top:0; left:0; right:0; height:1px; background:linear-gradient(90deg,transparent,rgba(255,255,255,0.9),transparent); }
+.shimmer { position:absolute; top:-50%; left:-50%; width:60px; height:200%; background:linear-gradient(90deg,transparent,rgba(255,255,255,0.4),transparent); transform:skewX(-15deg); animation:shimmer 4s ease-in-out infinite; }
+@keyframes shimmer { 0%{left:-100%} 50%,100%{left:150%} }
+.badge { display:inline-flex; align-items:center; gap:6px; background:linear-gradient(135deg,#fff0f6,#fff5ee); border:1.5px solid var(--pink-light); border-radius:100px; padding:6px 14px; font-size:10px; font-weight:600; letter-spacing:0.1em; text-transform:uppercase; color:var(--pink); transform-origin:left center; transition:transform 0.3s cubic-bezier(0.34,1.56,0.64,1); }
+.badge::before { content:'●'; font-size:8px; animation:pulse-dot 2s infinite; }
+@keyframes pulse-dot { 0%,100%{opacity:1} 50%{opacity:0.3} }
+.serif { font-family:var(--font-serif); }
+h1.display { font-family:var(--font-serif); font-size:clamp(28px,7vw,38px); line-height:1.15; font-weight:400; color:var(--text); }
+h2.title { font-family:var(--font-serif); font-size:clamp(22px,5.5vw,30px); line-height:1.2; font-weight:400; color:var(--text); }
+p.body { font-size:15px; line-height:1.65; color:var(--muted); font-weight:400; }
+p.small { font-size:12px; letter-spacing:0.04em; color:#c4a0b5; font-weight:400; }
+.highlight { color:var(--pink); }
+.italic { font-style:italic; }
+.case-id { font-size:11px; font-family:'Courier New',monospace; color:#c4a0b5; background:rgba(244,114,182,0.07); padding:4px 10px; border-radius:6px; letter-spacing:0.05em; }
+.divider { width:100%; height:1px; background:linear-gradient(90deg,transparent,var(--pink-light),transparent); margin:4px 0; }
+.btn { display:inline-flex; align-items:center; justify-content:center; gap:8px; font-family:var(--font-sans); font-weight:500; font-size:15px; border-radius:100px; border:none; cursor:pointer; transition:all 0.25s cubic-bezier(0.34,1.56,0.64,1); position:relative; overflow:hidden; -webkit-tap-highlight-color:transparent; }
+.btn::after { content:''; position:absolute; inset:0; background:rgba(255,255,255,0); transition:background 0.2s; }
+.btn:hover::after { background:rgba(255,255,255,0.15); }
+.btn:active { transform:scale(0.96) !important; }
+.btn-primary { width:100%; padding:17px 28px; background:linear-gradient(135deg,var(--pink),var(--rose)); color:white; box-shadow:0 4px 20px rgba(244,114,182,0.4),0 1px 0 rgba(255,255,255,0.2) inset; letter-spacing:0.01em; }
+.btn-primary:hover { transform:translateY(-2px) scale(1.01); box-shadow:0 8px 30px rgba(244,114,182,0.5); }
+.progress-wrap { width:100%; background:rgba(244,114,182,0.12); border-radius:100px; height:6px; overflow:hidden; }
+.progress-bar { height:100%; background:linear-gradient(90deg,var(--pink),var(--rose)); border-radius:100px; width:0%; transition:width 0.6s cubic-bezier(0.4,0,0.2,1); box-shadow:0 0 10px rgba(244,114,182,0.4); }
+.check-list { display:flex; flex-direction:column; gap:12px; width:100%; }
+.check-item { display:flex; align-items:center; gap:12px; padding:12px 16px; border-radius:14px; background:rgba(244,114,182,0.04); border:1px solid transparent; transition:all 0.4s ease; opacity:0.35; }
+.check-item.done { opacity:1; background:rgba(244,114,182,0.08); border-color:rgba(244,114,182,0.2); animation:item-pop 0.35s cubic-bezier(0.34,1.56,0.64,1); }
+.check-item.running { opacity:1; background:rgba(244,114,182,0.05); }
+@keyframes item-pop { 0%{transform:scale(0.92) translateX(-4px)} 60%{transform:scale(1.04) translateX(2px)} 100%{transform:scale(1) translateX(0)} }
+.check-icon { width:28px; height:28px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:13px; flex-shrink:0; background:rgba(244,114,182,0.1); transition:all 0.3s; }
+.check-item.done .check-icon { background:linear-gradient(135deg,var(--pink),var(--rose)); color:white; box-shadow:0 3px 12px rgba(244,114,182,0.4); }
+.check-item.running .check-icon::after { content:''; width:10px; height:10px; border:2px solid var(--pink); border-top-color:transparent; border-radius:50%; animation:spin 0.8s linear infinite; display:block; }
+@keyframes spin { to{transform:rotate(360deg)} }
+.check-label { font-size:14px; font-weight:500; flex:1; color:var(--text); }
+.check-sublabel { font-size:11px; color:var(--muted); font-style:italic; }
+
+/* timeline */
+.timeline { display:flex; flex-direction:column; gap:0; width:100%; }
+.tl-item { display:flex; gap:14px; align-items:flex-start; position:relative; }
+.tl-item:not(:last-child)::after { content:''; position:absolute; left:19px; top:36px; bottom:-8px; width:2px; background:linear-gradient(180deg,rgba(244,114,182,0.3),rgba(244,114,182,0.08)); }
+.tl-dot { width:38px; height:38px; border-radius:50%; background:rgba(244,114,182,0.1); border:1.5px solid rgba(244,114,182,0.25); display:flex; align-items:center; justify-content:center; font-size:18px; flex-shrink:0; margin-top:2px; }
+.tl-content { padding:0 0 20px; flex:1; }
+.tl-date { font-size:10px; font-weight:600; letter-spacing:0.1em; text-transform:uppercase; color:var(--pink); margin-bottom:3px; }
+.tl-title { font-size:15px; font-weight:600; color:var(--text); font-family:var(--font-serif); margin-bottom:3px; }
+.tl-desc { font-size:13px; color:var(--muted); line-height:1.5; }
+.tl-item.highlight-item .tl-dot { background:linear-gradient(135deg,rgba(244,114,182,0.2),rgba(251,113,133,0.15)); border-color:var(--pink); box-shadow:0 0 12px rgba(244,114,182,0.3); }
+
+/* evidence */
+.evidence-box { background:rgba(244,114,182,0.04); border:1px solid rgba(244,114,182,0.15); border-radius:16px; padding:18px; }
+.evidence-row { display:flex; align-items:baseline; gap:8px; padding:7px 0; border-bottom:1px solid rgba(244,114,182,0.08); }
+.evidence-row:last-child { border-bottom:none; }
+.ev-key { font-size:11px; font-weight:600; color:var(--muted); min-width:120px; flex-shrink:0; }
+.ev-val { font-size:13px; color:var(--text); font-family:'Courier New',monospace; }
+.ev-val.classified { background:var(--text); color:var(--text); border-radius:3px; cursor:pointer; transition:all 0.3s; user-select:none; }
+.ev-val.classified:hover,.ev-val.classified.revealed { background:transparent; color:var(--text); }
+.ev-val.classified::selection { background:transparent; }
+
+/* yes/no */
+#yes-btn { padding:20px 36px; background:linear-gradient(135deg,#ec4899,#f43f5e); color:white; border:none; border-radius:100px; font-family:var(--font-sans); font-size:18px; font-weight:600; cursor:pointer; box-shadow:0 6px 30px rgba(236,72,153,0.45),0 1px 0 rgba(255,255,255,0.25) inset; transition:all 0.3s cubic-bezier(0.34,1.56,0.64,1); letter-spacing:0.02em; position:relative; z-index:2; }
+#yes-btn:hover { transform:scale(1.06) translateY(-2px); box-shadow:0 10px 40px rgba(236,72,153,0.55); }
+#yes-btn:active { transform:scale(0.97); }
+#no-btn { padding:10px 22px; background:rgba(255,255,255,0.5); border:1.5px solid rgba(244,114,182,0.3); border-radius:100px; font-family:var(--font-sans); font-size:13px; font-weight:400; color:#c4a0b5; cursor:pointer; position:fixed; transition:all 0.45s cubic-bezier(0.34,1.56,0.64,1); z-index:100; white-space:nowrap; backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px); }
+.no-counter { font-size:12px; color:#c4a0b5; font-style:italic; text-align:center; min-height:20px; transition:all 0.3s; }
+
+/* choice grid */
+.choice-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; width:100%; }
+.choice-card { background:rgba(255,255,255,0.65); border:1.5px solid rgba(244,114,182,0.15); border-radius:var(--radius); padding:18px 14px; cursor:pointer; text-align:center; transition:all 0.25s cubic-bezier(0.34,1.56,0.64,1); -webkit-tap-highlight-color:transparent; backdrop-filter:blur(10px); -webkit-backdrop-filter:blur(10px); }
+.choice-card:hover,.choice-card:active { transform:scale(1.04); border-color:var(--pink); background:rgba(244,114,182,0.08); box-shadow:0 4px 20px rgba(244,114,182,0.2); }
+.choice-card.selected { border-color:var(--pink); background:linear-gradient(135deg,rgba(244,114,182,0.12),rgba(251,113,133,0.08)); box-shadow:0 4px 20px rgba(244,114,182,0.25); animation:card-wobble 0.4s cubic-bezier(0.34,1.56,0.64,1); }
+@keyframes card-wobble { 0%{transform:scale(1) rotate(0deg)} 30%{transform:scale(1.06) rotate(-1.5deg)} 60%{transform:scale(1.04) rotate(1deg)} 100%{transform:scale(1.02) rotate(0deg)} }
+.choice-card .emoji { font-size:28px; display:block; margin-bottom:8px; }
+.choice-card .label { font-size:13px; font-weight:500; color:var(--text); line-height:1.3; }
+.choice-card .sub { font-size:11px; color:var(--muted); margin-top:3px; }
+
+/* calendar */
+.calendar-wrap { width:100%; background:rgba(255,255,255,0.65); border:1.5px solid rgba(244,114,182,0.15); border-radius:var(--radius); padding:20px 16px; backdrop-filter:blur(10px); -webkit-backdrop-filter:blur(10px); }
+.cal-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:16px; }
+.cal-nav { background:none; border:1.5px solid rgba(244,114,182,0.3); border-radius:10px; width:32px; height:32px; cursor:pointer; font-size:16px; color:var(--pink); display:flex; align-items:center; justify-content:center; transition:all 0.2s; }
+.cal-nav:hover { background:rgba(244,114,182,0.1); transform:scale(1.1); }
+.cal-month { font-family:var(--font-serif); font-size:18px; color:var(--text); }
+.cal-grid { display:grid; grid-template-columns:repeat(7,1fr); gap:4px; }
+.cal-day-name { text-align:center; font-size:10px; font-weight:600; letter-spacing:0.08em; color:var(--muted); padding-bottom:8px; text-transform:uppercase; }
+.cal-day { aspect-ratio:1; display:flex; align-items:center; justify-content:center; border-radius:10px; font-size:13px; cursor:pointer; transition:all 0.2s; border:1.5px solid transparent; -webkit-tap-highlight-color:transparent; }
+.cal-day:empty { cursor:default; }
+.cal-day.past { color:#e0c8d4; pointer-events:none; }
+.cal-day.today { border-color:rgba(244,114,182,0.4); color:var(--pink); font-weight:600; }
+.cal-day:not(.past):not(:empty):hover { background:rgba(244,114,182,0.1); border-color:rgba(244,114,182,0.3); }
+.cal-day.selected { background:linear-gradient(135deg,var(--pink),var(--rose)); color:white; border-color:transparent; box-shadow:0 3px 12px rgba(244,114,182,0.4); transform:scale(1.1); }
+
+/* step dots */
+.step-progress { display:flex; align-items:center; gap:6px; justify-content:center; }
+.step-dot { width:8px; height:8px; border-radius:50%; background:rgba(244,114,182,0.2); transition:all 0.3s; }
+.step-dot.active { background:var(--pink); width:24px; border-radius:4px; box-shadow:0 0 8px rgba(244,114,182,0.5); }
+.step-dot.done { background:rgba(244,114,182,0.5); }
+
+/* location */
+.location-input { width:100%; padding:14px 18px; border-radius:14px; border:1.5px solid rgba(244,114,182,0.2); background:rgba(255,255,255,0.7); font-family:var(--font-sans); font-size:14px; color:var(--text); outline:none; transition:border-color 0.2s,box-shadow 0.2s; backdrop-filter:blur(10px); -webkit-backdrop-filter:blur(10px); }
+.location-input:focus { border-color:var(--pink); box-shadow:0 0 0 3px rgba(244,114,182,0.12); }
+.location-input::placeholder { color:#d4b0c4; }
+.suggestion-chips { display:flex; flex-wrap:wrap; gap:8px; margin-bottom:12px; }
+.chip { background:rgba(244,114,182,0.1); border:1px solid rgba(244,114,182,0.25); border-radius:100px; padding:7px 14px; font-size:12px; font-weight:500; color:var(--pink); cursor:pointer; transition:all 0.2s; -webkit-tap-highlight-color:transparent; }
+.chip:hover { background:rgba(244,114,182,0.18); transform:scale(1.04); }
+
+/* summary */
+.summary-grid { display:flex; flex-direction:column; gap:14px; width:100%; }
+.summary-row { display:flex; align-items:flex-start; gap:12px; padding:14px 16px; background:rgba(244,114,182,0.05); border-radius:14px; border:1px solid rgba(244,114,182,0.12); }
+.summary-icon { font-size:20px; flex-shrink:0; margin-top:1px; }
+.summary-key { font-size:10px; font-weight:600; letter-spacing:0.1em; text-transform:uppercase; color:var(--muted); margin-bottom:3px; }
+.summary-val { font-size:15px; font-weight:500; color:var(--text); font-family:var(--font-serif); }
+
+/* final */
+.heart-big { font-size:64px; animation:heartbeat 1.4s ease-in-out infinite; display:block; text-align:center; }
+@keyframes heartbeat { 0%,100%{transform:scale(1)} 14%{transform:scale(1.15)} 28%{transform:scale(1)} 42%{transform:scale(1.08)} 56%{transform:scale(1)} }
+.quote-block { border-left:3px solid var(--pink-glow); padding-left:16px; font-family:var(--font-serif); font-style:italic; font-size:16px; line-height:1.6; color:var(--muted); }
+
+/* confetti/hearts */
+#confetti-canvas { position:fixed; top:0; left:0; width:100%; height:100%; pointer-events:none; z-index:999; display:none; }
+.float-heart { position:fixed; pointer-events:none; font-size:18px; z-index:50; animation:floatUp 4s ease-out forwards; }
+@keyframes floatUp { 0%{transform:translateY(0) translateX(0) scale(0.5);opacity:0} 20%{opacity:0.8;transform:translateY(-60px) translateX(10px) scale(1)} 100%{transform:translateY(-200px) translateX(-20px) scale(0.3);opacity:0} }
+
+/* celebration */
+.celebration-overlay { position:fixed; inset:0; background:linear-gradient(135deg,rgba(255,240,246,0.97),rgba(255,245,238,0.97)); z-index:200; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:20px; padding:32px; opacity:0; pointer-events:none; transition:opacity 0.5s; backdrop-filter:blur(20px); -webkit-backdrop-filter:blur(20px); text-align:center; }
+.celebration-overlay.show { opacity:1; pointer-events:all; }
+
+/* pin */
+.pin-display { display:flex; gap:10px; justify-content:center; margin:8px 0 4px; }
+.pin-dot { width:14px; height:14px; border-radius:50%; border:2px solid rgba(244,114,182,0.4); background:transparent; transition:all 0.2s cubic-bezier(0.34,1.56,0.64,1); }
+.pin-dot.filled { background:var(--pink); border-color:var(--pink); transform:scale(1.15); box-shadow:0 0 8px rgba(244,114,182,0.5); }
+.pin-dot.error { background:#fb7185; border-color:#fb7185; animation:shake 0.4s ease; }
+@keyframes shake { 0%,100%{transform:translateX(0)} 20%{transform:translateX(-5px) scale(1.1)} 40%{transform:translateX(5px) scale(1.1)} 60%{transform:translateX(-4px)} 80%{transform:translateX(4px)} }
+.keypad { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; width:100%; max-width:280px; margin:0 auto; }
+.key-btn { aspect-ratio:1; border-radius:18px; border:1.5px solid rgba(244,114,182,0.18); background:rgba(255,255,255,0.7); font-family:var(--font-sans); font-size:20px; font-weight:500; color:var(--text); cursor:pointer; backdrop-filter:blur(10px); -webkit-backdrop-filter:blur(10px); transition:all 0.15s cubic-bezier(0.34,1.56,0.64,1); -webkit-tap-highlight-color:transparent; display:flex; align-items:center; justify-content:center; }
+.key-btn:hover { background:rgba(244,114,182,0.1); border-color:var(--pink); transform:scale(1.05); }
+.key-btn:active { transform:scale(0.93); background:rgba(244,114,182,0.18); }
+.key-btn.del { font-size:16px; color:var(--muted); }
+.key-btn.key-0 { grid-column:2; }
+.pin-error-msg { font-size:12px; color:#fb7185; text-align:center; min-height:18px; font-style:italic; }
+
+/* photos */
+.photo-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; width:100%; }
+.photo-placeholder { aspect-ratio:1; border-radius:16px; border:2px dashed rgba(244,114,182,0.35); background:rgba(244,114,182,0.04); display:flex; flex-direction:column; align-items:center; justify-content:center; gap:6px; cursor:pointer; transition:all 0.2s; position:relative; overflow:hidden; }
+.photo-placeholder:hover { border-color:var(--pink); background:rgba(244,114,182,0.08); transform:scale(1.02); }
+.photo-placeholder .ph-icon { font-size:24px; opacity:0.5; }
+.photo-placeholder .ph-label { font-size:10px; color:var(--muted); text-align:center; font-weight:500; letter-spacing:0.04em; padding:0 6px; line-height:1.4; }
+.photo-placeholder input[type="file"] { position:absolute; inset:0; opacity:0; cursor:pointer; width:100%; height:100%; }
+.photo-placeholder img { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; border-radius:14px; display:none; }
+.photo-placeholder.has-photo img { display:block; }
+.photo-placeholder.has-photo .ph-icon,.photo-placeholder.has-photo .ph-label { display:none; }
+.photo-placeholder-wide { grid-column:span 2; aspect-ratio:16/7; border-radius:16px; border:2px dashed rgba(244,114,182,0.35); background:rgba(244,114,182,0.04); display:flex; flex-direction:column; align-items:center; justify-content:center; gap:6px; cursor:pointer; transition:all 0.2s; position:relative; overflow:hidden; }
+.photo-placeholder-wide:hover { border-color:var(--pink); background:rgba(244,114,182,0.08); }
+.photo-placeholder-wide input[type="file"] { position:absolute; inset:0; opacity:0; cursor:pointer; }
+.photo-placeholder-wide img { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; border-radius:14px; display:none; }
+.photo-placeholder-wide.has-photo img { display:block; }
+.photo-placeholder-wide.has-photo .ph-icon,.photo-placeholder-wide.has-photo .ph-label { display:none; }
+
+/* secret panel */
+.secret-panel { display:none; position:fixed; inset:0; background:rgba(26,10,20,0.85); z-index:500; align-items:center; justify-content:center; padding:24px; backdrop-filter:blur(16px); -webkit-backdrop-filter:blur(16px); }
+.secret-panel.show { display:flex; animation:fadeSlideUp 0.4s cubic-bezier(0.34,1.56,0.64,1); }
+.secret-inner { background:rgba(26,10,20,0.95); border:1px solid rgba(244,114,182,0.3); border-radius:var(--radius-lg); padding:32px 28px; max-width:400px; width:100%; position:relative; }
+.secret-inner h3 { font-family:var(--font-serif); font-size:22px; color:#f9a8d4; margin-bottom:16px; }
+.secret-inner p { font-size:14px; color:rgba(244,200,220,0.8); line-height:1.7; }
+.secret-inner .close-secret { position:absolute; top:16px; right:16px; background:none; border:none; color:#f9a8d4; font-size:20px; cursor:pointer; }
+.stamp { display:inline-block; border:3px solid rgba(251,113,133,0.6); color:rgba(251,113,133,0.7); font-size:12px; font-weight:700; letter-spacing:0.15em; text-transform:uppercase; padding:6px 14px; border-radius:4px; transform:rotate(-8deg); margin-top:16px; font-family:'Courier New',monospace; }
+
+/* phone screen */
+.phone-screen { background:rgba(26,10,20,0.04); border:1.5px solid rgba(244,114,182,0.15); border-radius:20px; padding:20px 18px; width:100%; }
+.phone-number { font-family:'Courier New',monospace; font-size:28px; font-weight:700; color:var(--text); text-align:center; letter-spacing:0.12em; line-height:1; }
+.phone-flag { font-size:28px; text-align:center; display:block; margin-bottom:8px; }
+
+/* utility */
+.flex-row { display:flex; align-items:center; gap:12px; }
+.flex-col { display:flex; flex-direction:column; gap:8px; }
+.center { text-align:center; }
+.w-full { width:100%; }
+@media (max-width:360px) { .card{padding:24px 20px} h1.display{font-size:26px} .choice-grid{gap:8px} .choice-card{padding:14px 10px} .choice-card .emoji{font-size:24px} }
+.sr-only { position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; }
+</style>
+</head>
+<body>
+<canvas id="bg-canvas" aria-hidden="true"></canvas>
+<canvas id="confetti-canvas" aria-hidden="true"></canvas>
+
+<div class="app">
+  <div class="topbar">
+    <div class="topbar-logo" id="logo-tap">IDAS <span>·</span> v2.4.1</div>
+    <button class="mute-btn" id="mute-btn" aria-label="Toggle sound">🔊</button>
+  </div>
+
+  <!-- SCREEN 0: PIN -->
+  <div class="screen active" id="screen-0">
+    <div class="badge">Secure Access Required</div>
+    <div class="card">
+      <div class="shimmer"></div>
+      <div class="flex-col center" style="gap:22px;align-items:center">
+        <div style="font-size:48px;animation:heartbeat 2s ease-in-out infinite;line-height:1">🔐</div>
+        <div>
+          <h1 class="display center" style="font-size:clamp(22px,6vw,32px)">Classified<br><span class="highlight italic">Portal Access</span></h1>
+          <p class="body center" style="font-size:13px;margin-top:8px">This portal contains information of a <em>highly sensitive</em> romantic nature.<br>Please enter your access code to proceed.</p>
+        </div>
+        <div class="divider"></div>
+        <div class="pin-display" id="pin-display">
+          <div class="pin-dot" id="pd-0"></div><div class="pin-dot" id="pd-1"></div><div class="pin-dot" id="pd-2"></div>
+          <div class="pin-dot" id="pd-3"></div><div class="pin-dot" id="pd-4"></div><div class="pin-dot" id="pd-5"></div>
+        </div>
+        <p class="pin-error-msg" id="pin-error"></p>
+        <div class="keypad">
+          <button class="key-btn" onclick="pinKey('1')">1</button><button class="key-btn" onclick="pinKey('2')">2</button><button class="key-btn" onclick="pinKey('3')">3</button>
+          <button class="key-btn" onclick="pinKey('4')">4</button><button class="key-btn" onclick="pinKey('5')">5</button><button class="key-btn" onclick="pinKey('6')">6</button>
+          <button class="key-btn" onclick="pinKey('7')">7</button><button class="key-btn" onclick="pinKey('8')">8</button><button class="key-btn" onclick="pinKey('9')">9</button>
+          <button class="key-btn key-0" onclick="pinKey('0')">0</button><button class="key-btn del" onclick="pinDel()">⌫</button>
+        </div>
+        <p class="small center" style="font-style:italic;color:#d4b0c4">Hint: think about what makes today special 🤔</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- SCREEN 1: WELCOME + CASE FILE -->
+  <div class="screen" id="screen-1">
+    <div class="badge">Official — Ref. #PL-IT-DK-2025-♡</div>
+    <div class="card">
+      <div class="shimmer"></div>
+      <div class="flex-col" style="gap:20px">
+        <div class="case-id">Case ID: IDAS-PL-IT-DK-2025-00847-CONF</div>
+        <h1 class="display">International<br><span class="highlight italic">Date Authorization</span><br>System</h1>
+        <div class="divider"></div>
+        <p class="body">An application involving a <strong>Polish citizen</strong> and an <strong>Italian citizen</strong>, both currently residing in <strong>Denmark</strong>, has been submitted and is pending review.</p>
+        <div style="background:rgba(244,114,182,0.06);border:1px solid rgba(244,114,182,0.15);border-radius:14px;padding:16px 18px">
+          <p class="small" style="margin-bottom:6px;text-transform:uppercase;letter-spacing:0.1em;color:var(--pink)">Notice</p>
+          <p class="body" style="font-size:14px">We require your assistance to complete the compatibility assessment. This case has been flagged as <em>unusually promising</em>.</p>
+        </div>
+        <div class="divider"></div>
+        <div class="flex-row" style="justify-content:space-between">
+          <div><p class="small">Filed by</p><p style="font-size:13px;font-weight:600;color:var(--text)">🇮🇹 Italian Applicant</p></div>
+          <div style="text-align:right"><p class="small">Subject</p><p style="font-size:13px;font-weight:600;color:var(--text)">🇵🇱 Polish Citizen</p></div>
+        </div>
+        <div class="divider"></div>
+        <p class="small" style="text-transform:uppercase;letter-spacing:0.1em;color:var(--pink)">Evidence Submitted</p>
+        <div class="photo-grid">
+          <div class="photo-placeholder" id="ph-1"><input type="file" accept="image/*" onchange="loadPhoto(this,'ph-1')"><img src="" alt="Photo 1"><span class="ph-icon">📸</span><span class="ph-label">Photo 1</span></div>
+          <div class="photo-placeholder" id="ph-2"><input type="file" accept="image/*" onchange="loadPhoto(this,'ph-2')"><img src="" alt="Photo 2"><span class="ph-icon">🌸</span><span class="ph-label">Photo 2</span></div>
+          <div class="photo-placeholder-wide" id="ph-3"><input type="file" accept="image/*" onchange="loadPhoto(this,'ph-3')"><img src="" alt="Photo 3"><span class="ph-icon">🖼️</span><span class="ph-label" style="font-size:11px;color:var(--muted)">Wide photo — tap to add</span></div>
+        </div>
+      </div>
+    </div>
+    <button class="btn btn-primary" onclick="goToScreen(2)">Continue to Assessment →</button>
+    <p class="small center">Secure · Encrypted · Totally Official · Not Suspicious At All</p>
+  </div>
+
+  <!-- SCREEN 2: ASSESSMENT -->
+  <div class="screen" id="screen-2">
+    <div class="badge">Running Assessment</div>
+    <div class="card">
+      <div class="flex-col" style="gap:20px">
+        <div>
+          <h2 class="title" style="margin-bottom:6px">Compatibility<br>Review</h2>
+          <p class="body" style="font-size:13px">Cross-border social interaction protocols are being validated…</p>
+        </div>
+        <div class="flex-col" style="gap:6px">
+          <div class="flex-row" style="justify-content:space-between">
+            <p class="small">Assessment progress</p>
+            <p class="small" id="progress-pct">0%</p>
+          </div>
+          <div class="progress-wrap"><div class="progress-bar" id="progress-bar"></div></div>
+        </div>
+        <div class="check-list" id="check-list">
+          <div class="check-item" data-idx="0"><div class="check-icon">🍝</div><div><div class="check-label">Carbonara Compatibility Check</div><div class="check-sublabel">Subject consumed authentic Italian carbonara</div></div></div>
+          <div class="check-item" data-idx="1"><div class="check-icon">🍰</div><div><div class="check-label">Tiramisù Acceptance Protocol</div><div class="check-sublabel">No diplomatic incidents reported</div></div></div>
+          <div class="check-item" data-idx="2"><div class="check-icon">🕯️</div><div><div class="check-label">Danish Hygge Compliance</div><div class="check-sublabel">Cosiness quotient: approved</div></div></div>
+          <div class="check-item" data-idx="3"><div class="check-icon">🥶</div><div><div class="check-label">Winter Walk Survivability Test</div><div class="check-sublabel">2h 07m · "too cold" · passed with distinction</div></div></div>
+          <div class="check-item" data-idx="4"><div class="check-icon">☕</div><div><div class="check-label">Coffee Endurance Protocol</div><div class="check-sublabel">Intended: 1 coffee · Actual: classified</div></div></div>
+          <div class="check-item" data-idx="5"><div class="check-icon">📅</div><div><div class="check-label">Date Feasibility Calculation</div><div class="check-sublabel">Probability: 98.7% · Margin of error: negligible</div></div></div>
+        </div>
+        <div id="assessment-complete" style="display:none">
+          <div class="divider"></div>
+          <div style="display:flex;align-items:center;gap:10px;margin-top:8px">
+            <span style="font-size:22px">✅</span>
+            <div><p style="font-weight:600;font-size:15px;color:var(--text)">Assessment complete.</p><p class="body" style="font-size:13px">All parameters cleared. Results are ready for review.</p></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <button class="btn btn-primary" id="view-results-btn" style="display:none" onclick="goToScreen(2b)">View Case File →</button>
+  </div>
+
+  <!-- SCREEN 2B: TIMELINE + EVIDENCE -->
+  <div class="screen" id="screen-2b">
+    <div class="badge">Case Evidence Archive</div>
+    <div class="card">
+      <div class="flex-col" style="gap:20px">
+        <div>
+          <h2 class="title">Relationship<br><span class="highlight italic">Investigation</span><br>Timeline</h2>
+          <p class="body" style="font-size:13px;margin-top:6px">The following events have been verified and logged.</p>
+        </div>
+        <div class="divider"></div>
+        <div class="timeline">
+          <div class="tl-item">
+            <div class="tl-dot">🎉</div>
+            <div class="tl-content">
+              <div class="tl-date">Event — T-0</div>
+              <div class="tl-title">Initial Contact</div>
+              <div class="tl-desc">Random party. Copenhagen. Two strangers in the same room. Circumstances: unremarkable. Outcome: under review.</div>
+            </div>
+          </div>
+          <div class="tl-item highlight-item">
+            <div class="tl-dot">🚶</div>
+            <div class="tl-content">
+              <div class="tl-date">Exhibit A — The Walk</div>
+              <div class="tl-title">2-Hour Winter Walk</div>
+              <div class="tl-desc">Temperature: "too cold." Duration: 2h 07m. Stated purpose: escorting subject home. Actual outcome: still unexplained.</div>
+            </div>
+          </div>
+          <div class="tl-item">
+            <div class="tl-dot">💬</div>
+            <div class="tl-content">
+              <div class="tl-date">Phase 2</div>
+              <div class="tl-title">Suspiciously Frequent Texting</div>
+              <div class="tl-desc">Volume: above average. Content: classified. Pattern: consistent with early-stage interest.</div>
+            </div>
+          </div>
+          <div class="tl-item">
+            <div class="tl-dot">☕</div>
+            <div class="tl-content">
+              <div class="tl-date">Phase 3</div>
+              <div class="tl-title">The Coffee(s)</div>
+              <div class="tl-desc">Planned: 1 coffee. Actual: several. Duration: longer than either party anticipated. No complaints filed.</div>
+            </div>
+          </div>
+          <div class="tl-item">
+            <div class="tl-dot">🍝</div>
+            <div class="tl-content">
+              <div class="tl-date">Exhibit B</div>
+              <div class="tl-title">The Carbonara Incident</div>
+              <div class="tl-desc">Authentic Italian carbonara administered. Subject's reaction: positive. No egg-cream trauma reported.</div>
+            </div>
+          </div>
+          <div class="tl-item">
+            <div class="tl-dot">🍰</div>
+            <div class="tl-content">
+              <div class="tl-date">Exhibit C</div>
+              <div class="tl-title">The Tiramisù Incident</div>
+              <div class="tl-desc">No diplomatic incidents. High approval rating. Investigation ongoing.</div>
+            </div>
+          </div>
+          <div class="tl-item">
+            <div class="tl-dot">❓</div>
+            <div class="tl-content">
+              <div class="tl-date">Current Status</div>
+              <div class="tl-title">Under Review</div>
+              <div class="tl-desc">The committee is awaiting a final decision from the subject.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="flex-col" style="gap:16px">
+        <p class="small" style="text-transform:uppercase;letter-spacing:0.1em;color:var(--pink)">Exhibit A — Classified Details</p>
+        <div class="evidence-box">
+          <div class="evidence-row"><span class="ev-key">Duration</span><span class="ev-val">2h 07m</span></div>
+          <div class="evidence-row"><span class="ev-key">Temperature</span><span class="ev-val">"too cold"</span></div>
+          <div class="evidence-row"><span class="ev-key">Stated reason</span><span class="ev-val">safety escort</span></div>
+          <div class="evidence-row"><span class="ev-key">Actual reason</span><span class="ev-val classified" onclick="this.classList.toggle('revealed')">tap to declassify</span></div>
+          <div class="evidence-row"><span class="ev-key">Attempts to impress</span><span class="ev-val">0 (suspicious)</span></div>
+          <div class="evidence-row"><span class="ev-key">Unexpected outcome</span><span class="ev-val">ongoing investigation</span></div>
+        </div>
+        <p class="small center" style="font-style:italic">Tap redacted fields to declassify</p>
+      </div>
+    </div>
+    <button class="btn btn-primary" onclick="goToScreen(3)">View Results →</button>
+  </div>
+
+  <!-- SCREEN 3: REVEAL + YES/NO -->
+  <div class="screen" id="screen-3">
+    <div class="badge">Results — Confidential</div>
+    <div class="card">
+      <div class="flex-col center" style="gap:22px;align-items:center">
+        <div style="font-size:52px;animation:heartbeat 1.4s ease-in-out infinite;line-height:1">💌</div>
+        <div>
+          <h1 class="display center">Congratulations.</h1>
+          <p class="body center" style="margin-top:8px;font-size:14px">Case: <span class="case-id">IDAS-PL-IT-DK-2025-00847-CONF</span></p>
+        </div>
+        <div class="divider"></div>
+        <p class="body center">You have been selected as the <strong>preferred candidate</strong> for an international date experience.</p>
+
+        <!-- Compatibility Report -->
+        <div style="width:100%;background:rgba(244,114,182,0.05);border:1px solid rgba(244,114,182,0.15);border-radius:16px;padding:18px">
+          <p class="small" style="text-transform:uppercase;letter-spacing:0.1em;color:var(--pink);margin-bottom:12px">Compatibility Report</p>
+          <div class="evidence-box" style="background:transparent;border:none;padding:0">
+            <div class="evidence-row"><span class="ev-key">🇵🇱 Excessive use of "no to co"</span><span class="ev-val">✓</span></div>
+            <div class="evidence-row"><span class="ev-key">🇮🇹 Excessive use of olive oil</span><span class="ev-val">✓</span></div>
+            <div class="evidence-row"><span class="ev-key">🇩🇰 Joint hygge compliance</span><span class="ev-val">✓</span></div>
+            <div class="evidence-row"><span class="ev-key">Cultural exchange program</span><span class="ev-val">successful</span></div>
+            <div class="evidence-row" style="border:none"><span class="ev-key">Probability of good date</span><span class="ev-val" style="color:var(--pink);font-weight:700">98.7%</span></div>
+          </div>
+        </div>
+
+        <div style="background:linear-gradient(135deg,rgba(244,114,182,0.08),rgba(251,113,133,0.06));border:1.5px solid rgba(244,114,182,0.2);border-radius:18px;padding:20px 22px;width:100%">
+          <p class="body" style="font-size:14px;text-align:center;line-height:1.9">
+            After extensive review of all evidence…<br>
+            After interviews, inspections, audits<br>and international cooperation<br>between Poland, Italy and Denmark…<br><br>
+            <span style="font-family:var(--font-serif);font-size:18px;color:var(--text)">The committee has reached a conclusion.</span><br><br>
+            <em style="font-size:15px;color:var(--muted)">I really like spending time with you.</em><br><br>
+            And therefore —
+          </p>
+          <p style="font-family:var(--font-serif);font-size:19px;color:var(--text);text-align:center;margin-top:8px">Would you allow me the pleasure of taking you on an official date?</p>
+        </div>
+      </div>
+    </div>
+    <div class="flex-col center" style="gap:14px;align-items:center;width:100%">
+      <button id="yes-btn" onclick="acceptDate()" aria-label="Yes!">Yes ❤️</button>
+      <p class="no-counter" id="no-counter"></p>
+      <p class="small center" style="color:#dab8cc;font-size:11px">This button has been removed for regulatory reasons ↓</p>
+    </div>
+    <button id="no-btn" onclick="handleNo()" aria-label="Decline">No, thank you</button>
+  </div>
+
+  <!-- SCREEN 3B: WAIT... YOUR NUMBER -->
+  <div class="screen" id="screen-3b">
+    <div class="badge">Additional Information Required</div>
+    <div class="card">
+      <div class="flex-col center" style="gap:22px;align-items:center">
+        <div style="font-size:52px;line-height:1;animation:heartbeat 1.4s ease-in-out infinite">📱</div>
+        <div>
+          <h1 class="display center" style="font-size:clamp(24px,6vw,34px)">Wait…<br><span class="highlight italic">aspetta…</span><br>Czekać…</h1>
+        </div>
+        <div class="divider"></div>
+        <p class="body center" style="font-size:16px;line-height:1.8">
+          The system has detected<br>a critical missing field.<br><br>
+          <span style="font-family:var(--font-serif);font-size:20px;color:var(--text)">Mi serve il tuo numero di telefono.</span>
+        </p>
+        <div class="phone-screen">
+          <span class="phone-flag">📞</span>
+          <p class="small center" style="margin-bottom:8px;text-transform:uppercase;letter-spacing:0.1em;color:var(--pink)">Required field</p>
+          <div class="phone-number">+__ ___ ___ ___</div>
+          <p class="small center" style="margin-top:10px;font-style:italic">The applicant promises not to text at 3am.<br><em style="font-size:11px">(probably)</em></p>
+        </div>
+        <div style="background:rgba(244,114,182,0.06);border:1px dashed rgba(244,114,182,0.3);border-radius:14px;padding:16px;width:100%">
+          <p style="font-size:13px;color:var(--muted);text-align:center;line-height:1.7">
+            🇵🇱 <em>To tylko formalność.</em><br>
+            🇮🇹 <em>È solo una formalità.</em><br>
+            🇩🇰 <em>Det er bare en formalitet.</em><br><br>
+            <span style="font-size:12px;color:#c4a0b5">(It's just a formality.)</span>
+          </p>
+        </div>
+        <p class="small center" style="font-style:italic;color:var(--muted);font-size:13px">In all seriousness though — send it whenever.<br>No pressure. The system can wait.</p>
+      </div>
+    </div>
+    <button class="btn btn-primary" onclick="goToScreen(4)">Continue to Date Planning →</button>
+  </div>
+
+  <!-- SCREEN 4: PLANNING -->
+  <div class="screen" id="screen-4">
+    <div class="badge">Date Planning Portal</div>
+
+    <!-- Step 1: Date -->
+    <div id="step-1" class="w-full flex-col" style="gap:16px;display:flex">
+      <div class="step-progress">
+        <div class="step-dot active"></div><div class="step-dot"></div><div class="step-dot"></div><div class="step-dot"></div><div class="step-dot"></div>
+      </div>
+      <div class="card">
+        <div class="flex-col" style="gap:16px">
+          <div><h2 class="title">Pick a date 📅</h2><p class="body" style="font-size:13px;margin-top:6px">When are you available for this international cooperation?</p></div>
+          <div class="divider"></div>
+          <div class="calendar-wrap">
+            <div class="cal-header">
+              <button class="cal-nav" onclick="calNav(-1)" aria-label="Previous">‹</button>
+              <span class="cal-month" id="cal-month-label"></span>
+              <button class="cal-nav" onclick="calNav(1)" aria-label="Next">›</button>
+            </div>
+            <div class="cal-grid" id="cal-grid"></div>
+          </div>
+          <p class="small center" id="selected-date-label" style="min-height:16px;color:var(--pink)"></p>
+        </div>
+      </div>
+      <button class="btn btn-primary" id="step1-next" onclick="nextStep(2)" style="opacity:0.5;pointer-events:none">Next: Choose mission →</button>
+    </div>
+
+    <!-- Step 2: Activity (missions) -->
+    <div id="step-2" class="w-full flex-col" style="gap:16px;display:none">
+      <div class="step-progress">
+        <div class="step-dot done"></div><div class="step-dot active"></div><div class="step-dot"></div><div class="step-dot"></div><div class="step-dot"></div>
+      </div>
+      <div class="card">
+        <div class="flex-col" style="gap:16px">
+          <div><h2 class="title">Choose your<br><span class="highlight italic">mission</span></h2><p class="body" style="font-size:13px;margin-top:6px">Select your preferred operation format.</p></div>
+          <div class="divider"></div>
+          <div class="choice-grid" id="activity-grid">
+            <div class="choice-card" data-val="Operation Hygge ☕" onclick="selectChoice(this,'activity')"><span class="emoji">☕</span><div class="label">Operation Hygge</div><div class="sub">Coffee + walk</div></div>
+            <div class="choice-card" data-val="Operation Carbonara 🍝" onclick="selectChoice(this,'activity')"><span class="emoji">🍝</span><div class="label">Operation Carbonara</div><div class="sub">Italian dinner</div></div>
+            <div class="choice-card" data-val="Operation Sunset 🌅" onclick="selectChoice(this,'activity')"><span class="emoji">🌅</span><div class="label">Operation Sunset</div><div class="sub">Evening walk</div></div>
+            <div class="choice-card" data-val="Operation Surprise 🎲" onclick="selectChoice(this,'activity')"><span class="emoji">🎲</span><div class="label">Operation Surprise</div><div class="sub">Classified</div></div>
+            <div class="choice-card" data-val="Operation Pierogi 🥟" onclick="selectChoice(this,'activity')"><span class="emoji">🥟</span><div class="label">Operation Pierogi</div><div class="sub">Polish night</div></div>
+            <div class="choice-card" data-val="Operation Cozy 🍷" onclick="selectChoice(this,'activity')"><span class="emoji">🍷</span><div class="label">Operation Cozy</div><div class="sub">Maximum hygge</div></div>
+          </div>
+        </div>
+      </div>
+      <button class="btn btn-primary" id="step2-next" onclick="nextStep(3)" style="opacity:0.5;pointer-events:none">Next: Choose vibe →</button>
+    </div>
+
+    <!-- Step 3: Vibe -->
+    <div id="step-3" class="w-full flex-col" style="gap:16px;display:none">
+      <div class="step-progress">
+        <div class="step-dot done"></div><div class="step-dot done"></div><div class="step-dot active"></div><div class="step-dot"></div><div class="step-dot"></div>
+      </div>
+      <div class="card">
+        <div class="flex-col" style="gap:16px">
+          <div><h2 class="title">Set the vibe ✨</h2><p class="body" style="font-size:13px;margin-top:6px">What atmosphere should we request from the universe?</p></div>
+          <div class="divider"></div>
+          <div class="choice-grid" id="vibe-grid">
+            <div class="choice-card" data-val="Hygge mode 🕯️" onclick="selectChoice(this,'vibe')"><span class="emoji">🕯️</span><div class="label">Hygge mode</div><div class="sub">Warm & cozy</div></div>
+            <div class="choice-card" data-val="Romantic mode 🌹" onclick="selectChoice(this,'vibe')"><span class="emoji">🌹</span><div class="label">Romantic mode</div><div class="sub">Soft Italian energy</div></div>
+            <div class="choice-card" data-val="Adventure mode 🗺️" onclick="selectChoice(this,'vibe')"><span class="emoji">🗺️</span><div class="label">Adventure mode</div><div class="sub">Spontaneous & bold</div></div>
+            <div class="choice-card" data-val="Casual mode 😌" onclick="selectChoice(this,'vibe')"><span class="emoji">😌</span><div class="label">Casual mode</div><div class="sub">No drama, just vibes</div></div>
+          </div>
+        </div>
+      </div>
+      <button class="btn btn-primary" id="step3-next" onclick="nextStep(4)" style="opacity:0.5;pointer-events:none">Next: Location →</button>
+    </div>
+
+    <!-- Step 4: Location -->
+    <div id="step-4" class="w-full flex-col" style="gap:16px;display:none">
+      <div class="step-progress">
+        <div class="step-dot done"></div><div class="step-dot done"></div><div class="step-dot done"></div><div class="step-dot active"></div><div class="step-dot"></div>
+      </div>
+      <div class="card">
+        <div class="flex-col" style="gap:16px">
+          <div><h2 class="title">Location 📍</h2><p class="body" style="font-size:13px;margin-top:6px">Choose from our diplomatically approved venues.</p></div>
+          <div class="divider"></div>
+          <div class="suggestion-chips">
+            <div class="chip" onclick="setLocation('Neutral territory ⚖️')">Neutral territory</div>
+            <div class="chip" onclick="setLocation('Café with diplomatic immunity ☕')">Diplomatic café</div>
+            <div class="chip" onclick="setLocation('Hygge-approved venue 🕯️')">Hygge-approved</div>
+            <div class="chip" onclick="setLocation('Italian embassy of pasta affairs 🍝')">Pasta embassy</div>
+            <div class="chip" onclick="setLocation('Copenhagen — somewhere good')">Copenhagen</div>
+          </div>
+          <input type="text" class="location-input" id="location-input" placeholder="Or type your own suggestion…" oninput="onLocationInput()" aria-label="Location">
+        </div>
+      </div>
+      <button class="btn btn-primary" id="step4-next" onclick="nextStep(5)" style="opacity:0.5;pointer-events:none">Next: Confirm →</button>
+    </div>
+
+    <!-- Step 5: Summary -->
+    <div id="step-5" class="w-full flex-col" style="gap:16px;display:none">
+      <div class="step-progress">
+        <div class="step-dot done"></div><div class="step-dot done"></div><div class="step-dot done"></div><div class="step-dot done"></div><div class="step-dot active"></div>
+      </div>
+      <div class="card">
+        <div class="flex-col" style="gap:16px">
+          <div class="center"><div style="font-size:36px;margin-bottom:10px">🗓️</div><h2 class="title center">Confirm your date</h2><p class="body center" style="font-size:13px;margin-top:6px">Please review the cooperation agreement.</p></div>
+          <div class="divider"></div>
+          <div class="summary-grid">
+            <div class="summary-row"><span class="summary-icon">📅</span><div><div class="summary-key">Date</div><div class="summary-val" id="sum-date">—</div></div></div>
+            <div class="summary-row"><span class="summary-icon">🎯</span><div><div class="summary-key">Mission</div><div class="summary-val" id="sum-activity">—</div></div></div>
+            <div class="summary-row"><span class="summary-icon">✨</span><div><div class="summary-key">Vibe</div><div class="summary-val" id="sum-vibe">—</div></div></div>
+            <div class="summary-row"><span class="summary-icon">📍</span><div><div class="summary-key">Location</div><div class="summary-val" id="sum-location">—</div></div></div>
+          </div>
+          <div style="background:rgba(244,114,182,0.06);border:1px solid rgba(244,114,182,0.15);border-radius:14px;padding:14px 16px">
+            <p style="font-size:12px;color:var(--muted);text-align:center;font-style:italic;line-height:1.6">By confirming, you agree to enjoy yourself, accept at least one dramatic Italian story, and embrace the full spectrum of Polish-Italian-Danish cultural exchange.</p>
+          </div>
+        </div>
+      </div>
+      <button class="btn btn-primary" onclick="finalConfirm()">Confirm & Seal the Deal ❤️</button>
+    </div>
+  </div>
+
+  <!-- SCREEN 5: FINAL -->
+  <div class="screen" id="screen-5">
+    <div class="card" style="text-align:center">
+      <div class="flex-col center" style="gap:22px;align-items:center">
+        <span class="heart-big">❤️</span>
+        <div><h1 class="display center">Agreement<br><span class="highlight italic">Ratified.</span></h1><p class="small center" style="margin-top:8px">Treaty Ref: IDAS-PL-IT-DK-2025-❤️</p></div>
+        <div class="divider"></div>
+        <p class="body center" style="font-size:15px">Thank you for approving this international cooperation agreement.</p>
+        <div class="quote-block" style="text-align:left">"I promise good conversation, at least one bad joke, and a serious commitment to finding excellent coffee."</div>
+        <div style="background:rgba(244,114,182,0.06);border:1px solid rgba(244,114,182,0.15);border-radius:18px;padding:20px 22px;width:100%">
+          <p class="body" style="font-size:14px;line-height:1.85;text-align:center">
+            🇮🇹 One espresso might become four.<br>
+            🇵🇱 One walk might become a whole evening.<br>
+            🇩🇰 One café might become the best story<br>we both tell for a long time.<br><br>
+            <span style="font-family:var(--font-serif);font-size:18px;color:var(--text)">I'm looking forward to it.</span>
+          </p>
+        </div>
+        <p style="font-family:var(--font-serif);font-size:24px;color:var(--text)">See you soon <span class="highlight">❤️</span></p>
+        <p class="small" style="color:#dab8cc;font-style:italic">— Your Italian co-signatory 🇮🇹</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Celebration overlay -->
+<div class="celebration-overlay" id="celebrate">
+  <div id="cel-phase-1" style="display:flex;flex-direction:column;align-items:center;gap:22px;max-width:340px;width:100%">
+    <div style="font-size:72px;line-height:1">😳</div>
+    <h1 class="display center" style="color:var(--text);font-size:clamp(26px,7vw,36px)">Wait — <span class="highlight italic">seriously?</span></h1>
+    <p class="body center" style="font-size:16px">You actually said yes?<br>Are you <em>crazy?!</em> 😂</p>
+    <p class="body center" style="font-size:14px;font-style:italic;color:var(--muted);line-height:1.7">I mean — great. Wonderful. Totally expected.<br><br><em>(he did NOT expect this,<br>he's literally panicking right now)</em></p>
+    <button onclick="celebratePhase2()" style="margin-top:4px;padding:16px 36px;background:linear-gradient(135deg,#ec4899,#f43f5e);color:white;border:none;border-radius:100px;font-family:var(--font-sans);font-size:15px;font-weight:600;cursor:pointer;box-shadow:0 6px 24px rgba(236,72,153,0.4);transition:transform 0.2s;" onmouseover="this.style.transform='scale(1.05)'" onmouseout="this.style.transform='scale(1)'">Okay okay, continue →</button>
+  </div>
+  <div id="cel-phase-2" style="display:none;flex-direction:column;align-items:center;gap:16px">
+    <div style="font-size:64px;animation:heartbeat 1s ease-in-out infinite;line-height:1">🎉</div>
+    <h1 class="display center" style="color:var(--text)"><span class="highlight italic">Magnifico!</span></h1>
+    <p class="body center" style="font-size:16px;max-width:300px">The system has registered your acceptance.<br>One more thing first…</p>
+    <p class="small center" style="font-style:italic;color:var(--muted)">🇮🇹 "Perfetto!" — said dramatically, with gestures</p>
+  </div>
+</div>
+
+<!-- Secret panel -->
+<div class="secret-panel" id="secret-panel">
+  <div class="secret-inner">
+    <button class="close-secret" onclick="closeSecret()">✕</button>
+    <p class="small" style="color:#f9a8d4;text-transform:uppercase;letter-spacing:0.1em;margin-bottom:12px">⚠ Confidential — Eyes Only</p>
+    <h3>Witness Statement</h3>
+    <p>
+      "I originally escorted the subject home for safety reasons. Standard procedure.<br><br>
+      The situation has since become significantly more complicated.<br><br>
+      The walk lasted 2 hours and 7 minutes. It was cold. Neither party suggested stopping.<br><br>
+      I have no further comment at this time."
+    </p>
+    <div class="stamp">Classified 🔒</div>
+  </div>
+</div>
+
+<script>
+/* ── PIN ── */
+const CORRECT_PIN = '130326';
+let pinEntry = '';
+function pinKey(d) {
+  if (pinEntry.length >= 6) return;
+  pinEntry += d;
+  updatePinDots();
+  playTone(500 + parseInt(d)*30,'sine',0.07,0.15);
+  if (pinEntry.length === 6) setTimeout(checkPin, 180);
+}
+function pinDel() { if(!pinEntry.length) return; pinEntry=pinEntry.slice(0,-1); updatePinDots(); playBoop(); }
+function updatePinDots() {
+  for(let i=0;i<6;i++){const dot=document.getElementById(`pd-${i}`);dot.classList.remove('filled','error');if(i<pinEntry.length)dot.classList.add('filled');}
+  document.getElementById('pin-error').textContent='';
+}
+function checkPin() {
+  if(pinEntry===CORRECT_PIN){
+    for(let i=0;i<6;i++)document.getElementById(`pd-${i}`).classList.add('filled');
+    playSuccess(); for(let i=0;i<6;i++)spawnHeart(); setTimeout(()=>goToScreen(1),600);
+  } else {
+    for(let i=0;i<6;i++){const d=document.getElementById(`pd-${i}`);d.classList.remove('filled');d.classList.add('error');}
+    playTone(200,'sawtooth',0.25,0.25);
+    const msgs=['Access denied. 🚫','Nope. Not even close. 🙃','The system is judging you.','Hint: it\'s a significant date 📅','Still wrong… 🫠'];
+    document.getElementById('pin-error').textContent=msgs[Math.floor(Math.random()*msgs.length)];
+    setTimeout(()=>{for(let i=0;i<6;i++)document.getElementById(`pd-${i}`).classList.remove('error');pinEntry='';},900);
+  }
+}
+document.addEventListener('keydown',e=>{
+  if(!document.getElementById('screen-0').classList.contains('active'))return;
+  if(e.key>='0'&&e.key<='9')pinKey(e.key);
+  if(e.key==='Backspace')pinDel();
+});
+
+/* ── PHOTOS ── */
+function loadPhoto(input,id){
+  const file=input.files[0]; if(!file)return;
+  const r=new FileReader();
+  r.onload=e=>{const el=document.getElementById(id);el.querySelector('img').src=e.target.result;el.classList.add('has-photo');playPop();spawnHeart();};
+  r.readAsDataURL(file);
+}
+
+/* ── AUDIO ── */
+let muted=false;
+const AudioCtx=window.AudioContext||window.webkitAudioContext;
+let actx;
+function getCtx(){if(!actx)actx=new AudioCtx();if(actx.state==='suspended')actx.resume();return actx;}
+function playTone(freq,type='sine',dur=0.12,vol=0.18){
+  if(muted)return;
+  try{const a=getCtx(),osc=a.createOscillator(),gain=a.createGain();osc.connect(gain);gain.connect(a.destination);osc.type=type;osc.frequency.setValueAtTime(freq,a.currentTime);osc.frequency.exponentialRampToValueAtTime(freq*0.85,a.currentTime+dur);gain.gain.setValueAtTime(vol,a.currentTime);gain.gain.exponentialRampToValueAtTime(0.001,a.currentTime+dur);osc.start();osc.stop(a.currentTime+dur+0.02);}catch(e){}
+}
+function playPop(){playTone(520,'sine',0.08,0.2);}
+function playBoop(){playTone(380,'sine',0.1,0.15);}
+function playHeart(){playTone(660,'sine',0.2,0.25);setTimeout(()=>playTone(880,'sine',0.15,0.2),120);}
+function playSuccess(){[523,659,784,1047].forEach((f,i)=>setTimeout(()=>playTone(f,'sine',0.15,0.22),i*80));}
+function playMegaSuccess(){[523,587,659,698,784,880,988,1047].forEach((f,i)=>setTimeout(()=>playTone(f,'triangle',0.2,0.28),i*60));}
+function playRunaway(){playTone(200,'sawtooth',0.07,0.12);}
+document.getElementById('mute-btn').addEventListener('click',function(){muted=!muted;this.textContent=muted?'🔇':'🔊';});
+
+/* ── BG PARTICLES ── */
+(function(){
+  const canvas=document.getElementById('bg-canvas'),c=canvas.getContext('2d');let W,H,particles=[];
+  function resize(){W=canvas.width=window.innerWidth;H=canvas.height=window.innerHeight;}
+  function P(){this.reset();}
+  P.prototype.reset=function(){this.x=Math.random()*W;this.y=Math.random()*H+H;this.vy=-(0.3+Math.random()*0.7);this.vx=(Math.random()-0.5)*0.4;this.size=2+Math.random()*5;this.alpha=0;this.maxAlpha=0.12+Math.random()*0.15;this.fadeIn=true;this.life=0;this.maxLife=200+Math.random()*300;this.char=Math.random()<0.25?'♥':['·','✦','◦','•'][Math.floor(Math.random()*4)];this.color=Math.random()<0.5?'#f472b6':'#fb7185';};
+  P.prototype.update=function(){this.x+=this.vx;this.y+=this.vy;this.life++;if(this.fadeIn){this.alpha=Math.min(this.maxAlpha,this.alpha+0.003);if(this.alpha>=this.maxAlpha)this.fadeIn=false;}else if(this.life>this.maxLife*0.7){this.alpha-=0.002;}if(this.alpha<=0||this.y<-20)this.reset();};
+  P.prototype.draw=function(){c.save();c.globalAlpha=this.alpha;c.fillStyle=this.color;c.font=`${this.size}px sans-serif`;c.fillText(this.char,this.x,this.y);c.restore();};
+  window.addEventListener('resize',resize);resize();
+  for(let i=0;i<40;i++){const p=new P();p.y=Math.random()*H;p.life=Math.random()*p.maxLife*0.7;particles.push(p);}
+  function loop(){c.clearRect(0,0,W,H);particles.forEach(p=>{p.update();p.draw();});requestAnimationFrame(loop);}
+  loop();
+})();
+
+/* ── NAVIGATION ── */
+function goToScreen(n) {
+  if(n>0)playPop();
+  document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
+  const id = (n==='2b') ? 'screen-2b' : (n==='3b') ? 'screen-3b' : `screen-${n}`;
+  document.getElementById(id).classList.add('active');
+  window.scrollTo({top:0,behavior:'smooth'});
+  if(n===2)startAssessment();
+  if(n===3)positionNoBtn();
+  if(n===4)initCalendar();
+}
+
+/* ── ASSESSMENT ── */
+function startAssessment(){
+  const checks=document.querySelectorAll('.check-item'),bar=document.getElementById('progress-bar'),pct=document.getElementById('progress-pct');
+  const delays=[400,1100,1900,2700,3500,4200],total=checks.length;
+  checks.forEach((item,i)=>{
+    setTimeout(()=>{playBoop();item.classList.add('running');},delays[i]);
+    setTimeout(()=>{item.classList.remove('running');item.classList.add('done');item.querySelector('.check-icon').textContent='✓';const p=Math.round(((i+1)/total)*100);bar.style.width=p+'%';pct.textContent=p+'%';playTone(400+i*40,'sine',0.1,0.2);},delays[i]+650);
+  });
+  setTimeout(()=>{
+    document.getElementById('assessment-complete').style.display='block';
+    const btn=document.getElementById('view-results-btn');btn.style.display='flex';btn.style.animation='fadeSlideUp 0.5s cubic-bezier(0.34,1.56,0.64,1) both';
+    playSuccess();
+  },delays[total-1]+900);
+}
+// fix the onclick for view-results btn
+document.addEventListener('DOMContentLoaded',()=>{
+  const btn=document.getElementById('view-results-btn');
+  if(btn) btn.onclick=()=>goToScreen('2b');
+});
+
+/* ── NO BUTTON ── */
+let noAttempts=0,yesScale=1;
+function positionNoBtn(){
+  const btn=document.getElementById('no-btn'),vw=window.innerWidth,vh=window.innerHeight;
+  btn.style.left=Math.max(20,Math.min(vw-160,vw/2-60))+'px';
+  btn.style.top=Math.max(300,Math.min(vh-80,vh-100))+'px';
+  btn.style.display='block';
+}
+function handleNo(){
+  noAttempts++;playRunaway();
+  yesScale=Math.min(1+noAttempts*0.08,2.2);
+  const yes=document.getElementById('yes-btn');
+  yes.style.transform=`scale(${yesScale})`;
+  yes.style.boxShadow=`0 ${6+noAttempts*2}px ${30+noAttempts*5}px rgba(236,72,153,${0.3+noAttempts*0.04})`;
+  yes.style.fontSize=Math.min(18+noAttempts,26)+'px';
+  for(let i=0;i<3;i++)spawnHeart();
+  const counter=document.getElementById('no-counter');
+  let msg=`Attempts to decline: ${noAttempts}`;
+  if(noAttempts>=15)msg+=' 🚨 Italian authorities notified.';
+  else if(noAttempts>=10)msg+=' 🕵️ Suspicious hesitation detected.';
+  else if(noAttempts>=5)msg+=' 😏 Nice try.';
+  counter.textContent=msg;counter.style.color=noAttempts>7?'var(--pink)':'#c4a0b5';
+}
+function moveNoBtn(){
+  const btn=document.getElementById('no-btn'),margin=20,btnW=btn.offsetWidth||130,btnH=btn.offsetHeight||44;
+  const maxX=window.innerWidth-btnW-margin,maxY=window.innerHeight-btnH-margin;
+  btn.style.left=(margin+Math.random()*maxX)+'px';
+  btn.style.top=(margin+200+Math.random()*(maxY-200))+'px';
+}
+document.getElementById('no-btn').addEventListener('touchstart',e=>{e.preventDefault();handleNo();moveNoBtn();},{passive:false});
+const ESCAPE_RADIUS=80;
+document.addEventListener('mousemove',e=>{
+  const btn=document.getElementById('no-btn');
+  if(btn.style.display==='none')return;
+  if(!document.getElementById('screen-3').classList.contains('active'))return;
+  const rect=btn.getBoundingClientRect(),cx=rect.left+rect.width/2,cy=rect.top+rect.height/2;
+  const dist=Math.sqrt((e.clientX-cx)**2+(e.clientY-cy)**2);
+  if(dist<ESCAPE_RADIUS){handleNo();moveNoBtn();}
+});
+window.addEventListener('resize',()=>{if(document.getElementById('screen-3').classList.contains('active'))positionNoBtn();});
+
+/* ── HEARTS ── */
+function spawnHeart(x,y){
+  const h=document.createElement('div');h.className='float-heart';
+  h.textContent=['❤️','💕','💗','💖','✨'][Math.floor(Math.random()*5)];
+  h.style.left=(x??Math.random()*window.innerWidth)+'px';
+  h.style.top=(y??(window.innerHeight-100+Math.random()*80))+'px';
+  h.style.animationDuration=(2.5+Math.random()*2)+'s';
+  h.style.fontSize=(14+Math.random()*16)+'px';
+  document.body.appendChild(h);setTimeout(()=>h.remove(),5000);
+}
+
+/* ── ACCEPT ── */
+function acceptDate(){
+  playHeart();document.getElementById('no-btn').style.display='none';
+  const ov=document.getElementById('celebrate');
+  document.getElementById('cel-phase-1').style.display='flex';
+  document.getElementById('cel-phase-2').style.display='none';
+  ov.classList.add('show');
+  playTone(300,'sine',0.3,0.3);
+}
+function celebratePhase2(){
+  playMegaSuccess();
+  document.getElementById('cel-phase-1').style.display='none';
+  document.getElementById('cel-phase-2').style.display='flex';
+  launchConfetti();
+  for(let i=0;i<18;i++)setTimeout(()=>spawnHeart(100+Math.random()*(window.innerWidth-200),100+Math.random()*(window.innerHeight/2)),i*80);
+  setTimeout(()=>{document.getElementById('celebrate').classList.remove('show');goToScreen('3b');},2600);
+}
+
+/* ── CONFETTI ── */
+(function(){
+  const canvas=document.getElementById('confetti-canvas'),c=canvas.getContext('2d');let pieces=[],running=false,frameId;
+  function resize(){canvas.width=window.innerWidth;canvas.height=window.innerHeight;}
+  window.addEventListener('resize',resize);resize();
+  const COLORS=['#f472b6','#fb7185','#fbbf24','#34d399','#60a5fa','#a78bfa','#f9a8d4'];
+  function Piece(){this.x=Math.random()*canvas.width;this.y=-10;this.w=8+Math.random()*12;this.h=4+Math.random()*6;this.color=COLORS[Math.floor(Math.random()*COLORS.length)];this.vx=(Math.random()-0.5)*6;this.vy=2+Math.random()*4;this.angle=Math.random()*Math.PI*2;this.va=(Math.random()-0.5)*0.3;this.alpha=1;this.shape=Math.random()<0.3?'heart':'rect';}
+  Piece.prototype.update=function(){this.x+=this.vx;this.y+=this.vy;this.vy+=0.06;this.angle+=this.va;if(this.y>canvas.height)this.alpha-=0.05;};
+  Piece.prototype.draw=function(){c.save();c.globalAlpha=this.alpha;c.fillStyle=this.color;c.translate(this.x,this.y);c.rotate(this.angle);if(this.shape==='heart'){c.font=`${this.w}px sans-serif`;c.fillText('♥',-this.w/2,this.h/2);}else{c.fillRect(-this.w/2,-this.h/2,this.w,this.h);}c.restore();};
+  window.launchConfetti=function(){
+    canvas.style.display='block';
+    for(let i=0;i<160;i++)setTimeout(()=>pieces.push(new Piece()),i*12);
+    if(!running){running=true;loop();}
+    setTimeout(()=>{canvas.style.display='none';pieces=[];running=false;cancelAnimationFrame(frameId);},5000);
+  };
+  function loop(){c.clearRect(0,0,canvas.width,canvas.height);pieces=pieces.filter(p=>p.alpha>0);pieces.forEach(p=>{p.update();p.draw();});if(pieces.length>0)frameId=requestAnimationFrame(loop);else running=false;}
+})();
+
+/* ── CALENDAR ── */
+let calYear,calMonth,selectedDate=null;
+const MONTHS=['January','February','March','April','May','June','July','August','September','October','November','December'];
+const DAYS=['Mo','Tu','We','Th','Fr','Sa','Su'];
+function initCalendar(){const now=new Date();calYear=now.getFullYear();calMonth=now.getMonth();renderCalendar();}
+function renderCalendar(){
+  document.getElementById('cal-month-label').textContent=`${MONTHS[calMonth]} ${calYear}`;
+  const grid=document.getElementById('cal-grid');grid.innerHTML='';
+  DAYS.forEach(d=>{const el=document.createElement('div');el.className='cal-day-name';el.textContent=d;grid.appendChild(el);});
+  const firstDay=new Date(calYear,calMonth,1).getDay(),offset=firstDay===0?6:firstDay-1,daysInMonth=new Date(calYear,calMonth+1,0).getDate(),today=new Date();
+  for(let i=0;i<offset;i++){const el=document.createElement('div');el.className='cal-day';grid.appendChild(el);}
+  for(let d=1;d<=daysInMonth;d++){
+    const el=document.createElement('div');el.className='cal-day';el.textContent=d;
+    const isPast=new Date(calYear,calMonth,d)<new Date(today.getFullYear(),today.getMonth(),today.getDate());
+    if(isPast){el.classList.add('past');}else{
+      if(d===today.getDate()&&calMonth===today.getMonth()&&calYear===today.getFullYear())el.classList.add('today');
+      if(selectedDate&&d===selectedDate.d&&calMonth===selectedDate.m&&calYear===selectedDate.y)el.classList.add('selected');
+      el.addEventListener('click',()=>selectDay(d));
+      el.setAttribute('tabindex','0');el.setAttribute('role','button');
+      el.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();selectDay(d);}});
+    }
+    grid.appendChild(el);
+  }
+}
+function selectDay(d){playPop();selectedDate={d,m:calMonth,y:calYear};renderCalendar();document.getElementById('selected-date-label').textContent=`✓ ${MONTHS[calMonth]} ${d}, ${calYear}`;const btn=document.getElementById('step1-next');btn.style.opacity='1';btn.style.pointerEvents='auto';spawnHeart(window.innerWidth/2,window.innerHeight/2);}
+function calNav(dir){playBoop();calMonth+=dir;if(calMonth>11){calMonth=0;calYear++;}if(calMonth<0){calMonth=11;calYear--;}renderCalendar();}
+
+/* ── PLANNING ── */
+const selections={activity:null,vibe:null,location:null};
+function selectChoice(el,type){
+  playPop();spawnHeart(el.getBoundingClientRect().left+el.offsetWidth/2,el.getBoundingClientRect().top);
+  el.parentElement.querySelectorAll('.choice-card').forEach(c=>c.classList.remove('selected'));
+  el.classList.add('selected');selections[type]=el.dataset.val;
+  const map={activity:'step2-next',vibe:'step3-next'};
+  if(map[type]){const btn=document.getElementById(map[type]);btn.style.opacity='1';btn.style.pointerEvents='auto';}
+}
+function setLocation(val){playPop();selections.location=val;document.getElementById('location-input').value=val;const btn=document.getElementById('step4-next');btn.style.opacity='1';btn.style.pointerEvents='auto';}
+function onLocationInput(){const val=document.getElementById('location-input').value.trim();selections.location=val||null;const btn=document.getElementById('step4-next');btn.style.opacity=val?'1':'0.5';btn.style.pointerEvents=val?'auto':'none';}
+function nextStep(n){
+  playSuccess();
+  for(let i=1;i<=5;i++){const el=document.getElementById(`step-${i}`);if(el)el.style.display=(i===n)?'flex':'none';}
+  window.scrollTo({top:0,behavior:'smooth'});
+  if(n===5)fillSummary();
+}
+function fillSummary(){
+  const dateStr=selectedDate?`${MONTHS[selectedDate.m]} ${selectedDate.d}, ${selectedDate.y}`:'TBD';
+  document.getElementById('sum-date').textContent=dateStr;
+  document.getElementById('sum-activity').textContent=selections.activity||'—';
+  document.getElementById('sum-vibe').textContent=selections.vibe||'—';
+  document.getElementById('sum-location').textContent=selections.location||'—';
+}
+function finalConfirm(){
+  playMegaSuccess();launchConfetti();
+  for(let i=0;i<12;i++)setTimeout(()=>spawnHeart(80+Math.random()*(window.innerWidth-160),80+Math.random()*(window.innerHeight/2)),i*100);
+  setTimeout(()=>goToScreen(5),800);
+}
+
+/* ── SECRET PANEL (5 taps on logo) ── */
+let logoTaps=0,logoTimer;
+document.getElementById('logo-tap').addEventListener('click',()=>{
+  logoTaps++;clearTimeout(logoTimer);
+  logoTimer=setTimeout(()=>logoTaps=0,2000);
+  if(logoTaps>=5){logoTaps=0;openSecret();}
+});
+function openSecret(){playSuccess();document.getElementById('secret-panel').classList.add('show');}
+function closeSecret(){document.getElementById('secret-panel').classList.remove('show');}
+
+/* ── TILT SYSTEM ── */
+function seededRand(s){const x=Math.sin(s+1)*10000;return x-Math.floor(x);}
+function applyCardTilts(){
+  document.querySelectorAll('.card').forEach((card,i)=>{
+    const tilt=(seededRand(i*7)-0.5)*3.6,dy=(seededRand(i*13)-0.5)*8;
+    card.dataset.baseTilt=tilt;card.dataset.baseDy=dy;
+    card.style.transform=`rotate(${tilt}deg) translateY(${dy}px)`;
+    card.style.zIndex=i%2===0?1:2;
+  });
+  document.querySelectorAll('.badge').forEach((el,i)=>{
+    el.style.transform=`translateX(${(seededRand(i*3+1)-0.5)*16}px)`;
+    el.style.display='inline-flex';
+  });
+}
+document.addEventListener('mousemove',e=>{
+  document.querySelectorAll('.screen.active .card').forEach(card=>{
+    const rect=card.getBoundingClientRect(),cx=rect.left+rect.width/2,cy=rect.top+rect.height/2;
+    const dx=(e.clientX-cx)/rect.width,dy=(e.clientY-cy)/rect.height;
+    const base=parseFloat(card.dataset.baseTilt)||0,baseDy=parseFloat(card.dataset.baseDy)||0;
+    card.style.transform=`rotate(${base+dx*2}deg) translateY(${baseDy}px) perspective(600px) rotateX(${dy*-4}deg) rotateY(${dx*4}deg)`;
+    card.style.boxShadow=`${-dx*10}px ${8+Math.abs(dy)*8}px 40px rgba(244,114,182,${0.12+Math.abs(dx)*0.08})`;
+  });
+});
+document.addEventListener('mouseleave',applyCardTilts);
+if(window.DeviceOrientationEvent){window.addEventListener('deviceorientation',e=>{
+  const gamma=Math.max(-20,Math.min(20,e.gamma||0)),beta=Math.max(-15,Math.min(15,(e.beta||0)-45));
+  document.querySelectorAll('.screen.active .card').forEach(card=>{
+    const base=parseFloat(card.dataset.baseTilt)||0,baseDy=parseFloat(card.dataset.baseDy)||0;
+    card.style.transform=`rotate(${base+gamma*0.12}deg) translateY(${baseDy+beta*0.16}px)`;
+  });
+});}
+const _obs=new MutationObserver(()=>{if(document.querySelector('.screen.active'))setTimeout(applyCardTilts,80);});
+_obs.observe(document.body,{subtree:true,attributeFilter:['class']});
+setTimeout(applyCardTilts,100);
+</script>
+</body>
+</html>
